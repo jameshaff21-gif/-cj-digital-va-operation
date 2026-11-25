@@ -52,9 +52,11 @@
     <div class="buyer-calendar-editor card" style="margin-top:14px;background:#101b2d">
      <div><b id="buyerCalendarSelectedLabel">Select a date</b><div class="sub">Choose which of your assigned shifts you want to work on this date.</div></div>
      <div class="field"><label for="buyerCalendarShiftSelect">Shift for selected date</label><select id="buyerCalendarShiftSelect"><option value="">Choose a shift</option></select></div>
+     <div class="field"><label for="buyerCalendarOTHours">Optional overtime hours for this date</label><input id="buyerCalendarOTHours" type="number" min="0" max="16" step="0.5" value="0" placeholder="0"><div class="sub">Enter planned overtime in hours. Leave at 0 if you do not want overtime.</div></div>
      <div class="actions"><button class="btn primary" id="buyerSaveShift" type="button">Save Shift</button><button class="btn" id="buyerToggleDayOff" type="button">Set as Day Off</button><button class="btn" id="buyerClearCalendarDate" type="button">Clear date</button></div>
     </div>
     <div class="buyer-calendar-foot"><div class="buyer-legend"><span><i class="work-key"></i> Scheduled shift</span><span><i class="off-key"></i> Day Off</span><span><i class="today-key"></i> Today</span></div></div>
+    <div class="row" style="margin-top:14px"><div class="card"><div class="sub">PLANNED OT HOURS · THIS MONTH</div><div class="big" id="buyerCalendarOTMonthTotal">0.0 hrs</div></div><div class="card"><div class="sub">PLANNED OT HOURS · THIS HALF</div><div class="big" id="buyerCalendarOTHalfTotal">0.0 hrs</div></div></div>
     <div class="sub" style="margin-top:10px">Click any date, choose an available shift, and save it. Day Off is optional and does not prevent clocking in or submitting orders.</div><div id="buyerCalendarMsg" class="status" aria-live="polite"></div>
    </section>
    <div class="row">
@@ -140,8 +142,8 @@ function renderBuyerScheduleCalendar(){
  const firstDow=new Date(y,m-1,start).getDay(),cells=[];for(let i=0;i<firstDow;i++)cells.push('<div class="buyer-day empty"></div>');
  for(let day=start;day<=end;day++){
   const date=phtDate(y,m,day),off=buyerCalendarDaysOff.has(date),assignment=buyerCalendarAssignments.get(date),shift=assignment?buyerCalendarOptions.find(x=>x.id===assignment.shift_id):null,isToday=date===todayPHT();
-  const state=off?'Day Off':shift?shiftLabel(shift):'No shift selected';
-  cells.push(`<button type="button" class="buyer-day ${off?'off':shift?'work':''} ${isToday?'today':''}" data-date="${date}" aria-pressed="${buyerCalendarSelectedDate===date}"><span class="num">${day}</span>${isToday?'<span class="today-tag">TODAY</span>':''}<span class="state">${escHtml(state)}</span></button>`);
+  const state=off?'Day Off':shift?shiftLabel(shift):'No shift selected',ot=Number(assignment?.optional_ot_hours||0);
+  cells.push(`<button type="button" class="buyer-day ${off?'off':shift?'work':''} ${isToday?'today':''}" data-date="${date}" aria-pressed="${buyerCalendarSelectedDate===date}"><span class="num">${day}</span>${isToday?'<span class="today-tag">TODAY</span>':''}<span class="state">${escHtml(state)}</span>${ot>0?`<span class="state">+${ot.toFixed(1)} OT hrs</span>`:''}</button>`);
  }
  $('buyerScheduleGrid').innerHTML=cells.join('');
  $('buyerScheduleGrid').querySelectorAll('button[data-date]').forEach(b=>b.addEventListener('click',()=>{buyerCalendarSelectedDate=b.dataset.date;renderBuyerScheduleCalendar();}));
@@ -150,6 +152,7 @@ function renderBuyerScheduleCalendar(){
  const sel=$('buyerCalendarShiftSelect');const previous=assignment?.shift_id||'';
  sel.innerHTML='<option value="">Choose a shift</option>'+buyerCalendarOptions.map(sh=>`<option value="${sh.id}">${escHtml(shiftLabel(sh))}</option>`).join('');sel.value=previous;
  sel.disabled=!inMonth||buyerCalendarOptions.length===0;
+ $('buyerCalendarOTHours').value=Number(assignment?.optional_ot_hours||0);$('buyerCalendarOTHours').disabled=!inMonth||!assignment?.shift_id;
  $('buyerSaveShift').disabled=!inMonth||!buyerCalendarOptions.length;
  $('buyerToggleDayOff').disabled=!inMonth;$('buyerToggleDayOff').textContent=buyerCalendarDaysOff.has(selected)?'Return to Available':'Set as Day Off';
  $('buyerClearCalendarDate').disabled=!inMonth||(!assignment&&!buyerCalendarDaysOff.has(selected));
@@ -160,7 +163,7 @@ async function loadBuyerScheduleCalendar(){
  const [{data:shifts,error:shiftErr},{data:offs,error:offErr},{data:entries,error:entryErr}]=await Promise.all([
   sb.from('shifts').select('id,shift_name,effective_date,scheduled_start_time,scheduled_end_time').eq('staff_id',currentUser.id).order('shift_name'),
   sb.from('buyer_day_offs').select('work_date').eq('staff_id',currentUser.id).gte('work_date',from).lte('work_date',to),
-  sb.from('buyer_calendar_entries').select('work_date,shift_id').eq('staff_id',currentUser.id).gte('work_date',from).lte('work_date',to)
+  sb.from('buyer_calendar_entries').select('work_date,shift_id,optional_ot_hours').eq('staff_id',currentUser.id).gte('work_date',from).lte('work_date',to)
  ]);
  buyerCalendarOptions=shifts||[];buyerCalendarShifts=buyerCalendarOptions.filter(x=>x.effective_date>=from&&x.effective_date<=to);
  buyerCalendarDaysOff=new Set((offs||[]).map(x=>x.work_date));buyerCalendarAssignments=new Map((entries||[]).map(x=>[x.work_date,x]));renderBuyerScheduleCalendar();
@@ -170,12 +173,13 @@ async function loadBuyerScheduleCalendar(){
  else showMsg('buyerCalendarMsg','Select a date, choose one of your assigned shifts, then click Save Shift.');
 }
 async function saveBuyerCalendarShift(){
- const date=buyerCalendarSelectedDate,shiftId=$('buyerCalendarShiftSelect').value;if(!date||date.slice(0,7)!==buyerCalendarMonth)return;
+ const date=buyerCalendarSelectedDate,shiftId=$('buyerCalendarShiftSelect').value,otHours=Number($('buyerCalendarOTHours').value||0);if(!date||date.slice(0,7)!==buyerCalendarMonth)return;
  if(!shiftId){showMsg('buyerCalendarMsg','Choose a shift first.',true);return;}
+ if(!Number.isFinite(otHours)||otHours<0||otHours>16){showMsg('buyerCalendarMsg','Enter overtime between 0 and 16 hours.',true);return;}
  showMsg('buyerCalendarMsg','Saving shift…');
- const {error}=await sb.from('buyer_calendar_entries').upsert({staff_id:currentUser.id,work_date:date,shift_id:shiftId},{onConflict:'staff_id,work_date'});
+ const {error}=await sb.from('buyer_calendar_entries').upsert({staff_id:currentUser.id,work_date:date,shift_id:shiftId,optional_ot_hours:otHours},{onConflict:'staff_id,work_date'});
  if(error){showMsg('buyerCalendarMsg','Could not save shift: '+error.message,true);return;}
- buyerCalendarAssignments.set(date,{work_date:date,shift_id:shiftId});buyerCalendarDaysOff.delete(date);
+ buyerCalendarAssignments.set(date,{work_date:date,shift_id:shiftId,optional_ot_hours:otHours});buyerCalendarDaysOff.delete(date);
  await sb.from('buyer_day_offs').delete().eq('staff_id',currentUser.id).eq('work_date',date);
  renderBuyerScheduleCalendar();showMsg('buyerCalendarMsg','Shift saved to your calendar.');
 }
@@ -191,6 +195,7 @@ $('buyerFirstHalf').addEventListener('click',()=>{buyerCalendarHalf='first';cons
 $('buyerSecondHalf').addEventListener('click',()=>{buyerCalendarHalf='second';const [y,m]=buyerCalendarMonth.split('-').map(Number);buyerCalendarSelectedDate=phtDate(y,m,16);renderBuyerScheduleCalendar()});
 $('buyerPrevMonth').addEventListener('click',async()=>{const [y,m]=buyerCalendarMonth.split('-').map(Number),d=new Date(y,m-2,1);buyerCalendarMonth=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;buyerCalendarSelectedDate=phtDate(d.getFullYear(),d.getMonth()+1,buyerCalendarHalf==='first'?1:16);await loadBuyerScheduleCalendar()});
 $('buyerNextMonth').addEventListener('click',async()=>{const [y,m]=buyerCalendarMonth.split('-').map(Number),d=new Date(y,m,1);buyerCalendarMonth=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;buyerCalendarSelectedDate=phtDate(d.getFullYear(),d.getMonth()+1,buyerCalendarHalf==='first'?1:16);await loadBuyerScheduleCalendar()});
+$('buyerCalendarShiftSelect').addEventListener('change',()=>{$('buyerCalendarOTHours').disabled=!buyerCalendarSelectedDate||buyerCalendarSelectedDate.slice(0,7)!==buyerCalendarMonth||!$('buyerCalendarShiftSelect').value;if(!$('buyerCalendarShiftSelect').value)$('buyerCalendarOTHours').value='0';});
 $('buyerSaveShift').addEventListener('click',saveBuyerCalendarShift);$('buyerToggleDayOff').addEventListener('click',toggleBuyerDayOff);$('buyerClearCalendarDate').addEventListener('click',clearBuyerCalendarDate);
 
 const escHtml=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
