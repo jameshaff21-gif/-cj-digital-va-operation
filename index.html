@@ -85,6 +85,38 @@
   </section><!-- end Dashboard workspace -->
  </main>
 </div>
+<style>
+#shiftStartGate{position:fixed;inset:0;z-index:9999;background:rgba(3,9,20,.86);display:none;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(5px)}
+#shiftStartGate .gate-card{width:min(520px,100%);max-height:92vh;overflow:auto;background:var(--panel,#142238);border:1px solid var(--line,#30415c);border-radius:18px;padding:22px;box-shadow:0 24px 80px #0009}
+#shiftStartGate .gate-card h2{margin:0 0 8px;font-size:23px}
+#shiftStartGate .gate-card .field{margin-top:14px}
+#shiftStartGate .gate-card input,#shiftStartGate .gate-card select{width:100%}
+#shiftStartGate .gate-help{font-size:12px;color:var(--muted);line-height:1.5}
+#shiftStartGate .gate-error{color:#ff9ba2;font-size:13px;min-height:18px;margin-top:8px}
+.buyer-day.started{background:#124c3d!important;border-color:#27a879!important;box-shadow:inset 0 0 0 1px #27a879}
+</style>
+<div id="shiftStartGate" role="dialog" aria-modal="true" aria-labelledby="shiftGateTitle">
+ <div class="gate-card">
+  <div class="sub">CJ DIGITAL MARKETPLACE · BUYER SHIFT</div>
+  <h2 id="shiftGateTitle">Start your shift</h2>
+  <p class="gate-help">Choose the shift you are starting. If you are starting late, enter your actual start time.</p>
+  <div class="field"><label for="gateShiftSelect">Assigned shift</label><select id="gateShiftSelect"><option value="">Loading shifts…</option></select></div>
+  <div class="field"><label><input type="checkbox" id="gateCustomTimeToggle"> I need to enter a custom start time</label></div>
+  <div class="field" id="gateCustomTimeWrap" style="display:none"><label for="gateCustomTime">Actual start time (Philippine time)</label><input type="time" id="gateCustomTime"></div>
+  <div class="field" id="gateBaselineWrap" style="display:none">
+   <label for="gateBaselineFile">First-time starting screenshot</label>
+   <input type="file" id="gateBaselineFile" accept="image/*">
+   <div class="gate-help">Only required once to establish your cumulative fulfilled-order baseline.</div>
+   <div class="gate-help" id="gateOcrStatus"></div>
+   <label for="gateBaselineCount" style="margin-top:9px">Starting fulfilled-order count (confirm OCR result)</label>
+   <input type="number" id="gateBaselineCount" min="0" step="1" placeholder="Detected count" />
+  </div>
+  <label class="ot-choice" style="display:flex;gap:8px;align-items:center;margin-top:14px"><input id="gateOtOpt" type="checkbox"> I'd like to work overtime (optional)</label>
+  <button class="btn primary" id="gateStartBtn" type="button" style="width:100%;margin-top:18px">Confirm and start shift</button>
+  <div id="gateError" class="gate-error"></div>
+ </div>
+</div>
+
 <script>
 // Supabase browser configuration. Publishable/anon keys are designed for client use with RLS enabled.
 const SUPABASE_URL = 'https://qzjcgkbnevgfonwpwlpt.supabase.co';
@@ -334,38 +366,6 @@ window.viewOrderProof=async id=>{const {data,error}=await sb.from('order_submiss
 /* Buyer schedule calendar */
 .buyer-schedule-head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}.buyer-month{font-size:clamp(26px,4vw,38px);font-weight:900;letter-spacing:.4px}.buyer-half-tabs{display:flex;gap:8px;flex-wrap:wrap}.buyer-half-tabs .active{background:var(--blue);border-color:var(--blue);color:white}.buyer-weekdays,.buyer-schedule-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:7px}.buyer-weekdays{margin:18px 0 7px;color:var(--muted);font-size:10px;font-weight:800;text-align:center}.buyer-day{min-height:92px;border:1px solid var(--line);border-radius:10px;background:#101b2d;padding:8px 5px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--text)}.buyer-day .num{font-size:16px;font-weight:850}.buyer-day .state{font-size:10px;color:var(--muted)}.buyer-day.work{background:#123d35;border-color:#1b725b}.buyer-day.off{background:#303744;border-color:#596273;color:#d4d9e1}.buyer-day.today{outline:2px solid var(--blue);outline-offset:1px}.buyer-day[aria-pressed="true"]{box-shadow:0 0 0 2px #9cc2ff inset}.buyer-calendar-editor{display:grid;grid-template-columns:minmax(180px,1fr) minmax(220px,1fr) auto;align-items:end;gap:12px}.buyer-calendar-editor .field{margin:0}@media(max-width:700px){.buyer-calendar-editor{grid-template-columns:1fr}}.buyer-day.empty{visibility:hidden}.buyer-day .today-tag{font-size:9px;color:#8db8ff;font-weight:800}.buyer-calendar-foot{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-top:15px}.buyer-legend{display:flex;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:11px}.buyer-legend span{display:flex;align-items:center;gap:6px}.buyer-legend i{width:10px;height:10px;border-radius:3px;display:inline-block}.buyer-legend .work-key{background:#20b887}.buyer-legend .off-key{background:#596273}.buyer-legend .today-key{background:#4388f5}@media(max-width:600px){.buyer-day{min-height:68px;padding:5px 2px}.buyer-day .num{font-size:14px}.buyer-day .state{font-size:9px}.buyer-weekdays{font-size:9px;gap:4px}.buyer-schedule-grid{gap:4px}}
 </style></head><body><h2>${escHtml(staffRes.data?.full_name||'Buyer')} · ${escHtml(data.reference_date)} · ${Number(data.fulfilled_count)} orders</h2><p>${escHtml(data.notes||'')}</p>${urls.map((u,i)=>`<p>Screenshot ${i+1}</p><img src="${u}">`).join('')}
-<style>
-#shiftStartGate{position:fixed;inset:0;z-index:9999;background:rgba(3,9,20,.86);display:none;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(5px)}
-#shiftStartGate .gate-card{width:min(520px,100%);max-height:92vh;overflow:auto;background:var(--panel,#142238);border:1px solid var(--line,#30415c);border-radius:18px;padding:22px;box-shadow:0 24px 80px #0009}
-#shiftStartGate .gate-card h2{margin:0 0 8px;font-size:23px}
-#shiftStartGate .gate-card .field{margin-top:14px}
-#shiftStartGate .gate-card input,#shiftStartGate .gate-card select{width:100%}
-#shiftStartGate .gate-help{font-size:12px;color:var(--muted);line-height:1.5}
-#shiftStartGate .gate-error{color:#ff9ba2;font-size:13px;min-height:18px;margin-top:8px}
-.buyer-day.started{background:#124c3d!important;border-color:#27a879!important;box-shadow:inset 0 0 0 1px #27a879}
-</style>
-<div id="shiftStartGate" role="dialog" aria-modal="true" aria-labelledby="shiftGateTitle">
- <div class="gate-card">
-  <div class="sub">CJ DIGITAL MARKETPLACE · BUYER SHIFT</div>
-  <h2 id="shiftGateTitle">Start your shift</h2>
-  <p class="gate-help">Choose the shift you are starting. If you are starting late, enter your actual start time.</p>
-  <div class="field"><label for="gateShiftSelect">Assigned shift</label><select id="gateShiftSelect"><option value="">Loading shifts…</option></select></div>
-  <div class="field"><label><input type="checkbox" id="gateCustomTimeToggle"> I need to enter a custom start time</label></div>
-  <div class="field" id="gateCustomTimeWrap" style="display:none"><label for="gateCustomTime">Actual start time (Philippine time)</label><input type="time" id="gateCustomTime"></div>
-  <div class="field" id="gateBaselineWrap" style="display:none">
-   <label for="gateBaselineFile">First-time starting screenshot</label>
-   <input type="file" id="gateBaselineFile" accept="image/*">
-   <div class="gate-help">Only required once to establish your cumulative fulfilled-order baseline.</div>
-   <div class="gate-help" id="gateOcrStatus"></div>
-   <label for="gateBaselineCount" style="margin-top:9px">Starting fulfilled-order count (confirm OCR result)</label>
-   <input type="number" id="gateBaselineCount" min="0" step="1" placeholder="Detected count" />
-  </div>
-  <label class="ot-choice" style="display:flex;gap:8px;align-items:center;margin-top:14px"><input id="gateOtOpt" type="checkbox"> I'd like to work overtime (optional)</label>
-  <button class="btn primary" id="gateStartBtn" type="button" style="width:100%;margin-top:18px">Confirm and start shift</button>
-  <div id="gateError" class="gate-error"></div>
- </div>
-</div>
-
 </body></html>`);w.document.close()};
 window.saveOT=async id=>{const n=Number($('ot-'+id).value);if(!Number.isInteger(n)||n<0)return showMsg('managerMsg','Overtime minutes must be a non-negative whole number.',true);const {error}=await sb.from('attendance').update({approved_overtime_minutes:n}).eq('id',id);showMsg('managerMsg',error?error.message:'Overtime adjustment saved.',!!error);if(!error)await loadManager()};
 
